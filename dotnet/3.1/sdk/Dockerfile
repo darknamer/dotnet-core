@@ -36,6 +36,11 @@ RUN dotnet_sdk_version=3.1.416 \
     # Trigger first run experience by running arbitrary cmd
     && dotnet help
 
+# Install report generator
+RUN dotnet tool install --global dotnet-sonarscanner
+RUN dotnet tool install -g dotnet-reportgenerator-globaltool
+# RUN echo 'export PATH="$PATH:/root/.dotnet/tools"' > ~/.bash_profile
+
 # Install PowerShell global tool
 RUN powershell_version=7.0.8 \
     && curl -fSL --output PowerShell.Linux.x64.$powershell_version.nupkg https://pwshtool.blob.core.windows.net/tool/$powershell_version/PowerShell.Linux.x64.$powershell_version.nupkg \
