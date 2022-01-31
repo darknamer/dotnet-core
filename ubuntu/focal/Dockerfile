@@ -6,6 +6,7 @@
 
 FROM ubuntu:focal
 
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update
 # procps is very common in build systems, and is a reasonably small package
@@ -25,7 +26,7 @@ RUN ln -fs /usr/share/zoneinfo/Asia/Bangkok /etc/localtime
 
 RUN set -eux; \
 	apt-get update && \
-	DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+	apt-get install -y --no-install-recommends \
 		ca-certificates \
 		curl \
 		netbase \
