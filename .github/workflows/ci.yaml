@@ -40,7 +40,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/unnamed22090/dotnet/sdk:6.0
+            ghcr.io/unnamed22090/dotnet:sdk-6.0
             unnamed22090/dotnet:sdk-6.0
       - name: SDK 3.1 Build and push
         uses: docker/build-push-action@v2
@@ -50,5 +50,5 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/unnamed22090/dotnet/sdk:3.1
+            ghcr.io/unnamed22090/dotnet:sdk-3.1
             unnamed22090/dotnet:sdk-3.1
