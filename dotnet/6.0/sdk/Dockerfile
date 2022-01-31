@@ -36,6 +36,11 @@ RUN curl -fSL --output dotnet.tar.gz https://dotnetcli.azureedge.net/dotnet/Sdk/
     # Trigger first run experience by running arbitrary cmd
     && dotnet help
 
+# Install report generator
+RUN dotnet tool install --global dotnet-sonarscanner
+RUN dotnet tool install -g dotnet-reportgenerator-globaltool
+# RUN echo 'export PATH="$PATH:/root/.dotnet/tools"' > ~/.bash_profile
+
 # Install PowerShell global tool
 RUN powershell_version=7.2.1 \
     && curl -fSL --output PowerShell.Linux.x64.$powershell_version.nupkg https://pwshtool.blob.core.windows.net/tool/$powershell_version/PowerShell.Linux.x64.$powershell_version.nupkg \
