@@ -1,5 +1,5 @@
-ARG REPO=mcr.microsoft.com/dotnet/runtime
-FROM $REPO:3.1.22-focal
+ARG REPO=unnamed22090/dotnet
+FROM $REPO:runtime-3.1
 
 # Install ASP.NET Core
 RUN aspnetcore_version=3.1.22 \

@@ -4,7 +4,10 @@ FROM $REPO:3.1.22-focal
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
+        # Install System.Drawing native dependencies
+        libc6-dev libgdiplus libx11-dev \
     && rm -rf /var/lib/apt/lists/*
+
 
 # Install .NET Core
 RUN dotnet_version=3.1.22 \
