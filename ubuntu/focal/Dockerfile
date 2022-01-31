@@ -13,6 +13,8 @@ RUN set -eux; \
 		curl \
 		netbase \
 		wget \
+		# Install System.Drawing native dependencies
+        libc6-dev libgdiplus libx11-dev \
 # https://bugs.debian.org/929417
 		tzdata \
 	; \
@@ -24,6 +26,8 @@ RUN set -ex; \
 		apt-get install -y --no-install-recommends \
 			gnupg \
 			dirmngr \
+			# Install System.Drawing native dependencies
+        	libc6-dev libgdiplus libx11-dev \
 		; \
 		rm -rf /var/lib/apt/lists/*; \
 	fi
