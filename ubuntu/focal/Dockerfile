@@ -29,8 +29,7 @@ RUN set -eux; \
 		wget \
 		# https://bugs.debian.org/929417
 		tzdata \
-	; \
-	rm -rf /var/lib/apt/lists/*
+	;
 
 RUN set -ex; \
 	if ! command -v gpg > /dev/null; then \
