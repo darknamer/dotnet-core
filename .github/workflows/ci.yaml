@@ -38,7 +38,7 @@ jobs:
           context: .
           file: ./ubuntu/focal/Dockerfile
           platforms: linux/amd64
-          push: false
+          push: true
           tags: |
             unnamed22090/ubuntu:focal
       - name: RUNTIME 6.0 Build and push
