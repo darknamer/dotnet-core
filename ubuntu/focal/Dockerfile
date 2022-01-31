@@ -20,9 +20,11 @@ RUN apt-get install -y --no-install-recommends \
 RUN apt install -y \
 	# Install System.Drawing native dependencies
 	libc6-dev libgdiplus libx11-dev
-	
+
+RUN ln -fs /usr/share/zoneinfo/Asia/Bangkok /etc/localtime
+
 RUN set -eux; \
-	apt-get update; \
+	apt-get update && \
 	DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 		ca-certificates \
 		curl \
