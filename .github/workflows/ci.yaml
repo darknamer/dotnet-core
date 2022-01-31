@@ -32,6 +32,8 @@ jobs:
       #     password: ${{ secrets.ACCESS_TOKEN }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
+
+      # build ubuntu os with focal
       - name: Ubuntu Build
         uses: docker/build-push-action@v2
         with:
@@ -41,6 +43,17 @@ jobs:
           push: true
           tags: |
             unnamed22090/ubuntu:focal
+
+      # build dotnet core 6.0
+      - name: RUNTIME DEPS 6.0 Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./dotnet/6.0/runtime-deps/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            unnamed22090/dotnet:runtime-deps-6.0
       - name: RUNTIME 6.0 Build and push
         uses: docker/build-push-action@v2
         with:
@@ -50,15 +63,6 @@ jobs:
           push: true
           tags: |
             unnamed22090/dotnet:runtime-6.0
-      - name: RUNTIME 3.1 Build and push
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./dotnet/3.1/runtime/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            unnamed22090/dotnet:runtime-3.1
       - name: ASPNET 6.0 Build and push
         uses: docker/build-push-action@v2
         with:
@@ -68,15 +72,6 @@ jobs:
           push: true
           tags: |
             unnamed22090/dotnet:aspnet-6.0
-      - name: SDK 3.1 Build and push
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./dotnet/3.1/aspnet/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            unnamed22090/dotnet:aspnet-3.1
       - name: SDK 6.0 Build and push
         uses: docker/build-push-action@v2
         with:
@@ -86,6 +81,35 @@ jobs:
           push: true
           tags: |
             unnamed22090/dotnet:sdk-6.0
+
+      # build dotnet core 3.1
+      - name: RUNTIME DEPS 3.1 Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./dotnet/3.1/runtime-deps/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            unnamed22090/dotnet:runtime-deps-3.1
+      - name: RUNTIME 3.1 Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./dotnet/3.1/runtime/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            unnamed22090/dotnet:runtime-3.1
+      - name: SDK 3.1 Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./dotnet/3.1/aspnet/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            unnamed22090/dotnet:aspnet-3.1
       - name: SDK 3.1 Build and push
         uses: docker/build-push-action@v2
         with:

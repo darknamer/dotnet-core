@@ -1,4 +1,4 @@
-ARG REPO=mcr.microsoft.com/dotnet/runtime
+ARG REPO=unnamed22090/dotnet
 
 # Installer image
 FROM unnamed22090/ubuntu:focal as installer
@@ -12,7 +12,7 @@ RUN curl -fSL --output aspnetcore.tar.gz https://dotnetcli.azureedge.net/dotnet/
 
 
 # ASP.NET Core image
-FROM $REPO:6.0.1-focal-amd64
+FROM $REPO:runtime-6.0
 
 ENV \
     # ASP.NET Core version

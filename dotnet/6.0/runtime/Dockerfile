@@ -1,4 +1,4 @@
-ARG REPO=mcr.microsoft.com/dotnet/runtime-deps
+ARG REPO=unnamed22090/dotnet
 
 # Installer image
 FROM unnamed22090/ubuntu:focal as installer
@@ -13,7 +13,7 @@ RUN curl -fSL --output dotnet.tar.gz https://dotnetcli.azureedge.net/dotnet/Runt
 
 
 # .NET runtime image
-FROM $REPO:6.0.1-focal-amd64
+FROM $REPO:runtime-deps-6.0
 
 ENV DOTNET_VERSION=6.0.1
 

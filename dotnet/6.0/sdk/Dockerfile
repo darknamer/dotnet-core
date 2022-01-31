@@ -1,5 +1,5 @@
-ARG REPO=mcr.microsoft.com/dotnet/aspnet
-FROM $REPO:6.0.1-focal-amd64
+ARG REPO=unnamed22090/dotnet
+FROM $REPO:aspnet-6.0
 
 ENV \
     # Unset ASPNETCORE_URLS from aspnet base image

@@ -1,4 +1,4 @@
-FROM amd64/buildpack-deps:focal-scm
+FROM unnamed22090/ubuntu:focal
 
 ENV \
     # Do not generate certificate

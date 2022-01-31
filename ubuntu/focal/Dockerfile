@@ -6,6 +6,8 @@
 
 FROM ubuntu:focal
 
+RUN apt-get update
+
 RUN set -eux; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
@@ -13,12 +15,24 @@ RUN set -eux; \
 		curl \
 		netbase \
 		wget \
-		# Install System.Drawing native dependencies
-        libc6-dev libgdiplus libx11-dev \
-# https://bugs.debian.org/929417
+		# https://bugs.debian.org/929417
 		tzdata \
 	; \
 	rm -rf /var/lib/apt/lists/*
+
+# procps is very common in build systems, and is a reasonably small package
+RUN apt-get install -y --no-install-recommends \
+		bzr \
+		git \
+		mercurial \
+		openssh-client \
+		subversion \
+		\
+		procps
+
+RUN apt install -y \
+	# Install System.Drawing native dependencies
+	libc6-dev libgdiplus libx11-dev
 
 RUN set -ex; \
 	if ! command -v gpg > /dev/null; then \
@@ -26,8 +40,7 @@ RUN set -ex; \
 		apt-get install -y --no-install-recommends \
 			gnupg \
 			dirmngr \
-			# Install System.Drawing native dependencies
-        	libc6-dev libgdiplus libx11-dev \
 		; \
-		rm -rf /var/lib/apt/lists/*; \
 	fi
+
+RUN rm -rf /var/lib/apt/lists/*
