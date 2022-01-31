@@ -39,4 +39,4 @@ jobs:
           file: ./dotnet/6.0/sdk/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/unnamed22090/dotnet/sdk:6.0
+          tags: unnamed22090/dotnet/sdk:6.0
