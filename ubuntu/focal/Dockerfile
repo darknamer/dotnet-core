@@ -8,6 +8,19 @@ FROM ubuntu:focal
 
 RUN apt-get update
 
+# procps is very common in build systems, and is a reasonably small package
+RUN apt-get install -y --no-install-recommends \
+		bzr \
+		git \
+		mercurial \
+		openssh-client \
+		subversion \
+		procps
+
+RUN apt install -y \
+	# Install System.Drawing native dependencies
+	libc6-dev libgdiplus libx11-dev
+
 RUN set -eux; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
@@ -16,23 +29,7 @@ RUN set -eux; \
 		netbase \
 		wget \
 		# https://bugs.debian.org/929417
-		tzdata \
-	; \
-	rm -rf /var/lib/apt/lists/*
-
-# procps is very common in build systems, and is a reasonably small package
-RUN apt-get install -y --no-install-recommends \
-		bzr \
-		git \
-		mercurial \
-		openssh-client \
-		subversion \
-		\
-		procps
-
-RUN apt install -y \
-	# Install System.Drawing native dependencies
-	libc6-dev libgdiplus libx11-dev
+		tzdata
 
 RUN set -ex; \
 	if ! command -v gpg > /dev/null; then \
