@@ -6,6 +6,7 @@
 
 FROM ubuntu:focal
 
+
 RUN apt-get update
 # procps is very common in build systems, and is a reasonably small package
 RUN apt-get install -y --no-install-recommends \
@@ -22,7 +23,7 @@ RUN apt install -y \
 	
 RUN set -eux; \
 	apt-get update; \
-	apt-get install -y --no-install-recommends \
+	DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 		ca-certificates \
 		curl \
 		netbase \
