@@ -13,7 +13,7 @@ RUN apt-get update
 RUN apt-get install -y --no-install-recommends \
 		bzr \
 		git \
-		libgit2 \
+		libgit2-dev \
 		mercurial \
 		openssh-client \
 		subversion \
