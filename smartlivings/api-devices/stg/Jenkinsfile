@@ -217,12 +217,15 @@ echo "{
             \\\"claimName\\\": \\\"oneapp-loadtest\\\"
         }
     ],
-    \\\"isPublic\\\":true
-}" > data.json
-cat data.json
+    \\\"isPublic\\\": true
+}" > "${BUILD_TAG}.json"
+cat "${BUILD_TAG}.json"
 
 # post data file in curl via c20
-curl --request POST -k --url ${cauldronUrl}/apiserver/api/v1/c20/ --header 'content-type: application/json' --header 'host: apiserver.cauldron-c33.svc.cluster.local' --data @data.json
+curl --request POST -k --url ${cauldronUrl}/apiserver/api/v1/c20/ \\
+    --header 'content-type: application/json' \\
+    --header 'host: apiserver.cauldron-c33.svc.cluster.local' \\
+    --data "@${BUILD_TAG}.json"
 
 sleep 10
 
@@ -242,7 +245,7 @@ kubectl get pods --namespace=${appNamespace} -o wide
                                         configName: "${sshPublish}", 
                                         transfers: [
                                             sshTransfer(
-                                                cleanRemote: false, 
+                                                cleanRemote: true, 
                                                 excludes: '', 
                                                 execCommand: "${sshCmd}", 
                                                 flatten: false, 
