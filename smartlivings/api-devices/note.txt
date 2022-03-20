@@ -1,0 +1,5 @@
+[jenkins]
+URL: https://ais.matadorsuite.com/jenkins/aksjk-esport/job/Smart%20Living/job/Loadtest/job/Oneapp-Cauldron/job/PAAS-Cauldron/job/smartliving-paas-api-device-one/
+JobName: paas-api-device-one
+Username: admin
+Password: P@ssw0rd

@@ -1,0 +1,129 @@
+	pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: docker-daemon
+    image: docker:stable-dind
+    alwaysPullImage: false
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    volumeMounts:
+    - name: docker-volume
+      mountPath: /var/lib/docker
+  - name: docker-compose
+    image: docker/compose
+    alwaysPullImage: false
+    command:
+    - cat
+    tty: true
+    env:
+    - name: DOCKER_HOST
+      value: tcp://localhost:2375
+  volumes:
+    - name: docker-volume
+      hostPath:
+        path: /var/lib/docker
+"""
+        }
+    }
+
+    stages {
+		stage ('Checkout') {
+			steps {
+				script {
+						try {
+				checkout([$class: 'GitSCM', branches: [[name: '*/staging']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'siday732', url: 'https://git.matador.ais.co.th/spdteam/livingtech/livingplatform/oneapp-api.git']]])
+			}
+			catch (err) {
+				sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - Checkout FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+			}
+		}
+	}
+}
+		stage ('Build Image') {
+			steps {
+				script {
+						try {
+				container('docker-compose'){
+					sh '''
+					docker-compose -f docker-compose-staging-one-app-build.yml build
+					docker images
+					'''
+				}
+			}
+			catch (err) {
+				sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - BuildImage FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+			}
+		}
+	}
+}
+		stage('Push Image'){
+			steps {
+				script {
+						try {
+				container('docker-compose'){
+					sh '''
+					docker login -u espregist -p bI2CpTrqEHb4Yi8o/poMGC7DvLwm2Buw https://espregist.azurecr.io
+					
+					docker tag espregist.azurecr.io/smartliving/paas/smartlivingpaas-api_device-one-api:staging espregist.azurecr.io/smartliving/paas/smartlivingpaas-api_device-one-api:${BUILD_NUMBER}
+					docker push espregist.azurecr.io/smartliving/paas/smartlivingpaas-api_device-one-api:${BUILD_NUMBER}
+					
+
+					
+					docker images | grep espregist.azurecr.io/smartliving/paas/smartlivingpaas
+					'''
+				}
+			}
+			catch (err) {
+				sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - PushImage FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+			}
+		}
+	}
+}
+		stage('Deployment'){
+			steps {
+				script { 
+						try {
+				container('docker-compose'){
+					sh '''
+				echo stage Deploy
+				'''
+				sshPublisher(publishers: [sshPublisherDesc(configName: 'oneapp-cauldron-loadtest-20.205.226.198-azssmlvkubeltf001', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: '''
+TAG=${BUILD_NUMBER}
+echo "${TAG}"
+				
+curl --request DELETE --url http://10.0.11.7:32380/apiserver/api/v1/c20/oneappstg/paasapi-device-one --header \'content-type: application/json\' --header \'host: apiserver.cauldron-c33.svc.cluster.local\'
+
+curl --request POST --url http://10.0.11.7:32380/apiserver/api/v1/c20/ --header 'content-type: application/json' --header 'host: apiserver.cauldron-c33.svc.cluster.local' --data '{"namespace": "oneappstg","appName": "paasapi-device-one","appPort": '4000',"registry": {"server":"espregist.azurecr.io","username":"espregist","password":"bI2CpTrqEHb4Yi8o/poMGC7DvLwm2Buw","email":"pamir529@vanpl.postbox.in.th"},"imageName":"smartliving/paas/smartlivingpaas-api_device-one-api","imageTag":"\'"${BUILD_NUMBER}"\'","autoscaleMin":'1',"autoscaleMax":'1',"autoscaleCpuUtilization":'80',"appEnvParam":[{"name": "NODE_ENV","value": "develop"},{"name": "NODE_VERSION","value": "8.16.0"},{"name": "PORT","value": "4000"},{"name": "JWT_SECRET","value": "../keys/key.pem"},{"name": "JWT_EXPIRATION_MINUTES","value": "15"},{"name": "MONGO_USERNAME","value": "smartliving1"},{"name": "MONGO_PASSWORD","value": "ais"},{"name": "MONGO_INITDB_ROOT_USERNAME","value": "rootadmin"},{"name": "MONGO_INITDB_ROOT_PASSWORD","value": "admin"},{"name": "MONGO_URI","value": "mongodb://smartliving1:ais@10.0.11.10:37015/smartliving-pf"},{"name": "MONGO_ONE_URI","value": "mongodb://smartliving1:ais@10.0.11.10:37015/smartliving-oneapp"},{"name": "MONGO_URI_TESTS","value": "mongodb://smartliving1:ais@10.0.11.10:37015/smartliving-pf"},{"name": "PF_DEVICE_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "DEVICE_ONE_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "PF_HOME_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "PF_NOTIFICATION_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "PF_PROJECT_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "PF_USER_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "PF_UTIL_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "AIS_GATEWAY_API_URL","value": "https://apipg.ais.co.th:15411/api/v1/api-dir/"},{"name": "AIS_GATEWAY_API_PATH_InquiryHouseCondition","value": "services/Condition/InquiryHouseCondition"},{"name": "AIS_GATEWAY_API_PATH_InquiryHomeAutomation","value": "services/HouseDevice/InquiryHomeAutomation"},{"name": "AIS_GATEWAY_API_PATH_InquiryHouseDevice","value": "services/HouseDevice/InquiryHouseDevice"},{"name": "AIS_GATEWAY_API_PATH_InquiryScene","value": "services/Scene/InquiryScene"},{"name": "AIS_GATEWAY_API_PATH_DisableHomeCondition","value": "services/Condition/DisableHomeCondition"},{"name": "AIS_GATEWAY_API_PATH_EnableHomeCondition","value": "services/Condition/EnableHomeCondition"},{"name": "AIS_GATEWAY_API_PATH_DoScene","value": "services/Scene/DoScene"},{"name": "AIS_GATEWAY_API_PATH_TurnOnDevice","value": "services/HouseDevice/TurnOnDevice"},{"name": "AIS_GATEWAY_API_PATH_TurnOffDevice","value": "services/HouseDevice/TurnOffDevice"},{"name": "HOME_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "PROJECT_URI","value": "https://stg-oneapp.siamimo.com"},{"name": "URI_ADMD_API","value": "https://iot-apiv3.ais.co.th/"},{"name": "URI_SMS","value": "http://110.49.202.49:10080"},{"name": "SMS_FROM","value": "AISLiving"},{"name": "SMS_CHARGE","value": "66614152279"},{"name": "SMS_CODE","value": "35140077001"},{"name": "URI_PNS_SUBSCRIBER","value": "api/v3/pns/subscribers"},{"name": "URI_PNS_DEVICETOKEN","value": "api/v3/pns/deviceTokens"},{"name": "URI_PNS_REFRESHTOKENB","value": "auth/v3.1/oauth/token"},{"name": "URI_GW","value": "https://stg-oneapp.siamimo.com"},{"name": "URI_PAAS","value": "https://stg-oneapp.siamimo.com"},{"name": "URI_REFRESHTOKENB","value": "v1/partners/serviceCore/refreshTokenB"},{"name": "HOST_NAME","value": "paasliving-stg-api"},{"name": "KEYS_PATH","value": "../../../../../keys/"},{"name": "AIS_GATEWAY_ADMD","value": "https://iot-apiv3.ais.co.th/api/v3/smartgateway/AISGateway/"},{"name": "AIS_GATEWAY_V2_API_URL","value": "http://52.148.84.179:32709"},{"name": "AIS_GATEWAY_PROFILE","value": "/services/houseprofile"},{"name": "AIS_GATEWAY_CONTROL","value": "/services/homecontrol"},{"name": "AIS_GATEWAY_SECURITY","value": "/services/homesecurity"},{"name": "URI_PNS_DEVICETOKEN","value": "api/v3/pns/deviceTokens"}],"resources":{"requests":{"memory":"128M","cpu":"0.1"},"limits":{"memory":"128M","cpu":"0.2"}},"existingStorage":[{"mountPath":"/app/uploads","claimName":"oneapp-loadtest"}],"isPublic":'true'}'
+
+#curl --request POST --url http://10.0.11.7:32380/apiserver/api/v1/c20/oneappstg/paasapi-notification-one --header \'content-type: application/json\' --header \'host: apiserver.cauldron-c33.svc.cluster.local\' --data \'{"appVersion":"v\'"$TAG"\'.${BUILD_NUMBER}","weight":'100',"appPort":'4000',"registry":{"server":"espregist.azurecr.io","username":"espregist","password":"bI2CpTrqEHb4Yi8o/poMGC7DvLwm2Buw","email":"pamir529@vanpl.postbox.in.th"},"imageName":"smartliving/paas/smartlivingpaas-api_device-one-api","imageTag":"\'"${BUILD_NUMBER}"\'","autoscaleMin":'1',"autoscaleMax":'1',"autoscaleCpuUtilization":'80',"appEnvParam":[{"name": "NODE_ENV","value": "develop"},{"name": "NODE_VERSION","value": "8.16.0"},{"name": "PORT","value": "4000"},{"name": "JWT_SECRET","value": "../keys/key.pem"},{"name": "JWT_EXPIRATION_MINUTES","value": "15"},{"name": "MONGO_USERNAME","value": "smartliving1"},{"name": "MONGO_PASSWORD","value": "ais"},{"name": "MONGO_INITDB_ROOT_USERNAME","value": "rootadmin"},{"name": "MONGO_INITDB_ROOT_PASSWORD","value": "admin"},{"name": "MONGO_URI","value": "mongodb://smartliving1:ais@10.0.11.10:37015/smartliving-pf"},{"name": "MONGO_ONE_URI","value": "mongodb://smartliving1:ais@10.0.11.10:27017/smartliving-oneapp"},{"name": "MONGO_URI_TESTS","value": "mongodb://smartliving1:ais@10.0.11.10:37015/smartliving-pf"},{"name": "PF_DEVICE_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "DEVICE_ONE_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "PF_HOME_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "PF_NOTIFICATION_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "PF_PROJECT_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "PF_USER_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "PF_UTIL_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "AIS_GATEWAY_API_URL","value": "https://apipg.ais.co.th:15411/api/v1/api-dir/"},{"name": "AIS_GATEWAY_API_PATH_InquiryHouseCondition","value": "services/Condition/InquiryHouseCondition"},{"name": "AIS_GATEWAY_API_PATH_InquiryHomeAutomation","value": "services/HouseDevice/InquiryHomeAutomation"},{"name": "AIS_GATEWAY_API_PATH_InquiryHouseDevice","value": "services/HouseDevice/InquiryHouseDevice"},{"name": "AIS_GATEWAY_API_PATH_InquiryScene","value": "services/Scene/InquiryScene"},{"name": "AIS_GATEWAY_API_PATH_DisableHomeCondition","value": "services/Condition/DisableHomeCondition"},{"name": "AIS_GATEWAY_API_PATH_EnableHomeCondition","value": "services/Condition/EnableHomeCondition"},{"name": "AIS_GATEWAY_API_PATH_DoScene","value": "services/Scene/DoScene"},{"name": "AIS_GATEWAY_API_PATH_TurnOnDevice","value": "services/HouseDevice/TurnOnDevice"},{"name": "AIS_GATEWAY_API_PATH_TurnOffDevice","value": "services/HouseDevice/TurnOffDevice"},{"name": "HOME_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "PROJECT_URI","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "URI_ADMD_API","value": "https://iot-apiv3.ais.co.th/"},{"name": "URI_SMS","value": "http://110.49.202.49:10080"},{"name": "SMS_FROM","value": "AISLiving"},{"name": "SMS_CHARGE","value": "66614152279"},{"name": "SMS_CODE","value": "35140077001"},{"name": "URI_PNS_SUBSCRIBER","value": "api/v3/pns/subscribers"},{"name": "URI_PNS_DEVICETOKEN","value": "api/v3/pns/deviceTokens"},{"name": "URI_PNS_REFRESHTOKENB","value": "auth/v3.1/oauth/token"},{"name": "URI_GW","value": "https://smartlivinggwstg.dld-test.com"},{"name": "URI_PAAS","value": "https://smartlivingpaasstg.dld-test.com"},{"name": "URI_REFRESHTOKENB","value": "v1/partners/serviceCore/refreshTokenB"},{"name": "HOST_NAME","value": "paasliving-stg-api"},{"name": "KEYS_PATH","value": "../../../../../keys/"},{"name": "AIS_GATEWAY_ADMD","value": "https://iot-apiv3.ais.co.th/api/v3/smartgateway/AISGateway/"},{"name": "AIS_GATEWAY_V2_API_URL","value": "http://52.148.84.179:32709"},{"name": "AIS_GATEWAY_PROFILE","value": "/services/houseprofile"},{"name": "AIS_GATEWAY_CONTROL","value": "/services/homecontrol"},{"name": "AIS_GATEWAY_SECURITY","value": "/services/homesecurity"},{"name": "URI_PNS_DEVICETOKEN","value": "api/v3/pns/deviceTokens"}],"resources":{"requests":{"memory":"128M","cpu":"0.1"},"limits":{"memory":"128M","cpu":"0.2"}},"isPublic":'true'}\'
+
+sleep 10
+
+kubectl patch virtualservices.networking.istio.io -n oneappstg paasapi-device-one-cp --type='json' -p='[{"op": "replace", "path": "/spec/http/0/match/0/uri/prefix","value":"/v2/devices/"}]'
+
+
+kubectl get pods --namespace=oneappstg -o wide -l app=paasapi-notification-one
+
+''', flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '', remoteDirectorySDF: false, removePrefix: '', sourceFiles: '')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)])
+				
+				}
+				sh  '''
+				GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo "${JOB_BASE_NAME}#${BUILD_NUMBER} \n Deploy SUCCESS \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify
+				'''
+			}
+			catch (err) {
+				sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - Deploy FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+					}
+				}
+			}
+		}
+	}
+}

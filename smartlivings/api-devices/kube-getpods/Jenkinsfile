@@ -1,0 +1,93 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: docker-daemon
+    image: docker:stable-dind
+    alwaysPullImage: false
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    volumeMounts:
+    - name: docker-volume
+      mountPath: /var/lib/docker
+  - name: docker-compose
+    image: docker/compose
+    alwaysPullImage: false
+    command:
+    - cat
+    tty: true
+    env:
+    - name: DOCKER_HOST
+      value: tcp://localhost:2375
+  volumes:
+    - name: docker-volume
+      hostPath:
+        path: /var/lib/docker
+'''
+        }
+    }
+
+    stages {
+        
+        stage('Get pods') {
+            steps {
+                script {
+                    try {
+                        def sshCmd = '''
+kubectl get pods --namespace=${appNamespace} -o wide
+kubectl describe pods  --namespace=${appNamespace}
+'''
+
+                        container('docker-compose') {
+                            sh 'echo "--- KUBECTL ---"'
+
+                            sshPublisher(
+                                publishers: [
+                                    sshPublisherDesc(
+                                        configName: "${sshPublish}", 
+                                        transfers: [
+                                            sshTransfer(
+                                                cleanRemote: false, 
+                                                excludes: '', 
+                                                execCommand: "${sshCmd}", 
+                                                flatten: false, 
+                                                makeEmptyDirs: false, 
+                                                noDefaultExcludes: false, 
+                                                patternSeparator: '[, ]+', 
+                                                remoteDirectory: '', 
+                                                remoteDirectorySDF: false, 
+                                                removePrefix: '', 
+                                                sourceFiles: '')
+                                        ], 
+                                        usePromotionTimestamp: false, 
+                                        useWorkspaceInPromotion: false, 
+                                        verbose: false)
+                                ])
+                        }
+
+//                         sh  '''
+// GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo "${JOB_BASE_NAME}#${BUILD_NUMBER} \n Deploy SUCCESS \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify
+// '''
+                    } catch (err) {
+                        // sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - Deploy FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+                        cleanWs()
+                        error err.toString()
+                    }
+                }
+            }
+        }
+
+        stage('Finish') {
+            steps {
+                cleanWs()
+            }
+        }
+    }
+}

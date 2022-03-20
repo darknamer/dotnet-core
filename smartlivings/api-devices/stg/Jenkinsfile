@@ -1,0 +1,281 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: docker-daemon
+    image: docker:stable-dind
+    alwaysPullImage: false
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    volumeMounts:
+    - name: docker-volume
+      mountPath: /var/lib/docker
+  - name: docker-compose
+    image: docker/compose
+    alwaysPullImage: false
+    command:
+    - cat
+    tty: true
+    env:
+    - name: DOCKER_HOST
+      value: tcp://localhost:2375
+  volumes:
+    - name: docker-volume
+      hostPath:
+        path: /var/lib/docker
+'''
+        }
+    }
+
+    stages {
+        stage ('Checkout') {
+            steps {
+                script {
+                    try {
+                        def gitlabBranch = "${gitBranch}"
+                        if (env.gitlabBranch != null) {
+                            gitlabBranch = env.gitlabBranch
+                        }
+
+                        def imageTag = gitlabBranch.split('/')[1]
+                        echo "GitLab Release: ${imageTag}"
+                        env.dockerImageTag = imageTag;
+
+                        git branch: "${gitlabBranch}", credentialsId: "${gitCredentail}", url: "${gitUrl}"
+                    } catch (err) {
+                        // sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - Checkout FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+                        cleanWs()
+                        error err.toString()
+                    }
+                }
+            }
+        }
+
+        stage ('Build Image') {
+            steps {
+                script {
+                    try {
+                        ansiColor('xterm') {
+                            container('docker-compose') {
+                                sh '''
+docker-compose -f ${dockerComposeFile} build
+docker images
+'''
+                            }
+                        }
+                    } catch (err) {
+                        // sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - BuildImage FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+                        cleanWs()
+                        error err.toString()
+                    }
+                }
+            }
+        }
+
+        stage('Push Image') {
+            environment {
+                dockerImageTag = "${env.dockerImageTag}"
+            }
+
+            steps {
+                script {
+                    try {
+                        ansiColor('xterm') {
+                            echo "GitLab Release: ${dockerImageTag}"
+
+                            container('docker-compose') {
+                                sh '''
+docker login -u ${registryUsername} -p ${registryPassword} ${registryUrl}
+docker tag ${dockerPreImage} ${dockerImage}:${dockerImageTag}
+docker push ${dockerImage}:${dockerImageTag}
+docker images | grep ${dockerImageSearch}
+'''
+                            }
+                        }
+                    } catch (err) {
+                        // sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - PushImage FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+                        cleanWs()
+                        error err.toString()
+                    }
+                }
+            }
+        }
+        
+        stage('Deployment') {
+            environment {
+                dockerImageTag = "${env.dockerImageTag}"
+            }
+
+            steps {
+                script {
+                    try {
+                        echo "GitLab Release: ${dockerImageTag}"
+
+                        echo "DOCKER IMAGE: ${dockerImage}"
+                        echo "DOCKER TAG: ${dockerImageTag}"
+
+
+                        def imageTag = sh(returnStdout: true, script: '''
+# set image tag in env
+echo \"dockerImageTag=${dockerImageTag}\"
+''')
+                        def sshCmd = imageTag + '''
+
+echo "DOCKER IMAGE TAG: ${dockerImageTag}"
+
+curl --request DELETE \\
+    --url ${cauldronUrl}${cauldronC20DeployPath} \\
+    --header \'content-type: application/json\' \\
+    --header \'host: apiserver.cauldron-c33.svc.cluster.local\'
+
+# create json for deployment
+echo "{
+    \\\"namespace\\\": \\\"${appNamespace}\\\",
+    \\\"appName\\\": \\\"${appName}\\\",
+    \\\"appPort\\\": ${appPort},
+    \\\"registry\\\": {
+        \\\"server\\\": \\\"${registryServer}\\\",
+        \\\"username\\\": \\\"${registryUsername}\\\",
+        \\\"password\\\": \\\"${registryPassword}\\\",
+        \\\"email\\\": \\\"${registryEmail}\\\"
+    },
+    \\\"imageName\\\": \\\"${dockerImagePath}\\\",
+    \\\"imageTag\\\": \\\"${dockerImageTag}\\\",
+    \\\"autoscaleMin\\\": ${cauldronAutoscaleMin},
+    \\\"autoscaleMax\\\": ${cauldronAutoscaleMin},
+    \\\"autoscaleCpuUtilization\\\": ${cauldronAutoscaleCpuUtilization},
+    \\\"appEnvParam\\\": [
+        {\\\"name\\\": \\\"NODE_ENV\\\", \\\"value\\\": \\\"${appNodeEnv}\\\"},
+        {\\\"name\\\": \\\"NODE_VERSION\\\", \\\"value\\\": \\\"${appNodeVersion}\\\"},
+        {\\\"name\\\": \\\"PORT\\\", \\\"value\\\": \\\"${appPort}\\\"},
+        {\\\"name\\\": \\\"JWT_SECRET\\\", \\\"value\\\": \\\"${appJwtSecret}\\\"},
+        {\\\"name\\\": \\\"JWT_EXPIRATION_MINUTES\\\", \\\"value\\\": \\\"${appJwtExpirationMinutes}\\\"},
+        {\\\"name\\\": \\\"MONGO_USERNAME\\\", \\\"value\\\": \\\"${appMongoUsername}\\\"},
+        {\\\"name\\\": \\\"MONGO_PASSWORD\\\", \\\"value\\\": \\\"${appMongoPassword}\\\"},
+        {\\\"name\\\": \\\"MONGO_INITDB_ROOT_USERNAME\\\", \\\"value\\\": \\\"${appMongoInitDBRootUsername}\\\"},
+        {\\\"name\\\": \\\"MONGO_INITDB_ROOT_PASSWORD\\\", \\\"value\\\": \\\"${appMongoInitDBRootPassword}\\\"},
+        {\\\"name\\\": \\\"MONGO_URI\\\", \\\"value\\\": \\\"${appMongoUri}\\\"},
+        {\\\"name\\\": \\\"MONGO_ONE_URI\\\", \\\"value\\\": \\\"${appMongoOneUri}\\\"},
+        {\\\"name\\\": \\\"MONGO_URI_TESTS\\\", \\\"value\\\": \\\"${appMongoUriTest}\\\"},
+        {\\\"name\\\": \\\"PF_DEVICE_URI\\\", \\\"value\\\": \\\"${appPFDeviceUri}\\\"},
+        {\\\"name\\\": \\\"DEVICE_ONE_URI\\\", \\\"value\\\": \\\"${appDeviceOneUri}\\\"},
+        {\\\"name\\\": \\\"PF_HOME_URI\\\", \\\"value\\\": \\\"${appPFHomeUri}\\\"},
+        {\\\"name\\\": \\\"PF_NOTIFICATION_URI\\\", \\\"value\\\": \\\"${appPFNotificationUri}\\\"},
+        {\\\"name\\\": \\\"PF_PROJECT_URI\\\", \\\"value\\\": \\\"${appPFProjectUri}\\\"},
+        {\\\"name\\\": \\\"PF_USER_URI\\\", \\\"value\\\": \\\"${appPFUserUri}\\\"},
+        {\\\"name\\\": \\\"PF_UTIL_URI\\\", \\\"value\\\": \\\"${appPFUtilUri}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_URL\\\", \\\"value\\\": \\\"${appAISGatewayApiUrl}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_InquiryHouseCondition\\\", \\\"value\\\": \\\"${appAISGatewayApiPathInquiryHouseCondition}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_InquiryHomeAutomation\\\", \\\"value\\\": \\\"${appAISGatewayApiPathInquiryHomeAutomation}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_InquiryHouseDevice\\\", \\\"value\\\": \\\"${appAISGatewayApiPathInquiryHouseDevice}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_InquiryScene\\\", \\\"value\\\": \\\"${appAISGatewayApiPathInquiryScene}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_DisableHomeCondition\\\", \\\"value\\\": \\\"${appAISGatewayApiPathDisableHomeCondition}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_EnableHomeCondition\\\", \\\"value\\\": \\\"services/Condition/EnableHomeCondition\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_DoScene\\\", \\\"value\\\": \\\"services/Scene/DoScene\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_TurnOnDevice\\\", \\\"value\\\": \\\"services/HouseDevice/TurnOnDevice\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_API_PATH_TurnOffDevice\\\", \\\"value\\\": \\\"${appAISGatewayApiPathTurnOffDevice}\\\"},
+        {\\\"name\\\": \\\"HOME_URI\\\", \\\"value\\\": \\\"${appHomeUri}\\\"},
+        {\\\"name\\\": \\\"PROJECT_URI\\\", \\\"value\\\": \\\"${appProjectUri}\\\"},
+        {\\\"name\\\": \\\"URI_ADMD_API\\\", \\\"value\\\": \\\"${appADMDApi}\\\"},
+        {\\\"name\\\": \\\"URI_SMS\\\", \\\"value\\\": \\\"${appUriSMS}\\\"},
+        {\\\"name\\\": \\\"SMS_FROM\\\", \\\"value\\\": \\\"${appSMSFrom}\\\"},
+        {\\\"name\\\": \\\"SMS_CHARGE\\\", \\\"value\\\": \\\"${appSMSCharge}\\\"},
+        {\\\"name\\\": \\\"SMS_CODE\\\", \\\"value\\\": \\\"${appSMSCode}\\\"},
+        {\\\"name\\\": \\\"URI_PNS_SUBSCRIBER\\\", \\\"value\\\": \\\"${appUriPNSSubscriber}\\\"},
+        {\\\"name\\\": \\\"URI_PNS_DEVICETOKEN\\\", \\\"value\\\": \\\"${appUriPNSDeviceToken}\\\"},
+        {\\\"name\\\": \\\"URI_PNS_REFRESHTOKENB\\\", \\\"value\\\": \\\"${appUriPNSRefreshTokenB}\\\"},
+        {\\\"name\\\": \\\"URI_GW\\\", \\\"value\\\": \\\"${appUriGateway}\\\"},
+        {\\\"name\\\": \\\"URI_PAAS\\\", \\\"value\\\": \\\"${appUriPAAS}\\\"},
+        {\\\"name\\\": \\\"URI_REFRESHTOKENB\\\", \\\"value\\\": \\\"${appUriRefreshTokenB}\\\"},
+        {\\\"name\\\": \\\"HOST_NAME\\\", \\\"value\\\": \\\"${appHostName}\\\"},
+        {\\\"name\\\": \\\"KEYS_PATH\\\", \\\"value\\\": \\\"${appKeyPath}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_ADMD\\\", \\\"value\\\": \\\"${appAISGatewayADMD}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_V2_API_URL\\\", \\\"value\\\": \\\"${appAISGatewayV2ApiUrl}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_PROFILE\\\", \\\"value\\\": \\\"${appGatewayProfile}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_CONTROL\\\", \\\"value\\\": \\\"${appGatewayControl}\\\"},
+        {\\\"name\\\": \\\"AIS_GATEWAY_SECURITY\\\", \\\"value\\\": \\\"${appGatewaySecurity}\\\"}
+    ],
+    \\\"resources\\\": {
+        \\\"requests\\\": {
+            \\\"memory\\\": \\\"${cauldronRequestMemory}\\\",
+            \\\"cpu\\\": \\\"${cauldronRequestCPU}\\\"
+        },
+    \\\"limits\\\": {
+        \\\"memory\\\": \\\"${cauldronLimitMemory}\\\",
+        \\\"cpu\\\": \\\"${cauldronLimitCPU}\\\"}
+    },
+    \\\"existingStorage\\\": [
+        {
+            \\\"mountPath\\\": \\\"/app/uploads\\\",
+            \\\"claimName\\\": \\\"oneapp-loadtest\\\"
+        }
+    ],
+    \\\"isPublic\\\":true
+}" > data.json
+cat data.json
+
+# post data file in curl via c20
+curl --request POST -k --url ${cauldronUrl}/apiserver/api/v1/c20/ --header 'content-type: application/json' --header 'host: apiserver.cauldron-c33.svc.cluster.local' --data @data.json
+
+sleep 10
+
+kubectl patch virtualservices.networking.istio.io \\
+    -n ${appNamespace} paasapi-device-one-cp \\
+    --type='json' -p='[{"op": "replace", "path": "/spec/http/0/match/0/uri/prefix","value":"/v2/devices/"}]'
+
+kubectl get pods --namespace=${appNamespace} -o wide
+'''
+
+                        container('docker-compose') {
+                            sh 'echo "Stage Deploy"'
+
+                            sshPublisher(
+                                publishers: [
+                                    sshPublisherDesc(
+                                        configName: "${sshPublish}", 
+                                        transfers: [
+                                            sshTransfer(
+                                                cleanRemote: false, 
+                                                excludes: '', 
+                                                execCommand: "${sshCmd}", 
+                                                flatten: false, 
+                                                makeEmptyDirs: false, 
+                                                noDefaultExcludes: false, 
+                                                patternSeparator: '[, ]+', 
+                                                remoteDirectory: '', 
+                                                remoteDirectorySDF: false, 
+                                                removePrefix: '', 
+                                                sourceFiles: '')
+                                        ], 
+                                        usePromotionTimestamp: false, 
+                                        useWorkspaceInPromotion: false, 
+                                        verbose: false)
+                                ])
+                        }
+
+//                         sh  '''
+// GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo "${JOB_BASE_NAME}#${BUILD_NUMBER} \n Deploy SUCCESS \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify
+// '''
+                    } catch (err) {
+                        // sh 'GIT_COMMIT=$(git log -1 HEAD --pretty=format:%s) && MSG=$(echo  "${JOB_BASE_NAME}#${BUILD_NUMBER} \n - Deploy FAIL \n - Commit by : ${gitlabUserName} \n - Commit message: ${GIT_COMMIT} ") && curl -X POST -H "Authorization: Bearer ${LINE_NOFTIFY_TC_TOA}" -F "message=${MSG}" https://notify-api.line.me/api/notify'
+                        cleanWs()
+                        error err.toString()
+                    }
+                }
+            }
+        }
+
+        stage('Finish') {
+            steps {
+                cleanWs()
+            }
+        }
+    }
+}
