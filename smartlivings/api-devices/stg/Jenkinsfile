@@ -207,9 +207,10 @@ echo "{
             \\\"memory\\\": \\\"${cauldronRequestMemory}\\\",
             \\\"cpu\\\": \\\"${cauldronRequestCPU}\\\"
         },
-    \\\"limits\\\": {
-        \\\"memory\\\": \\\"${cauldronLimitMemory}\\\",
-        \\\"cpu\\\": \\\"${cauldronLimitCPU}\\\"}
+        \\\"limits\\\": {
+            \\\"memory\\\": \\\"${cauldronLimitMemory}\\\",
+            \\\"cpu\\\": \\\"${cauldronLimitCPU}\\\"
+        }
     },
     \\\"existingStorage\\\": [
         {
